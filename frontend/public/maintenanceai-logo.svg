@@ -1,0 +1,42 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldBg" x1="26" y1="22" x2="228" y2="234" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f3f80"/>
+      <stop offset="1" stop-color="#3fd2b8"/>
+    </linearGradient>
+    <linearGradient id="strokeGlow" x1="34" y1="32" x2="220" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#99f6e4"/>
+    </linearGradient>
+    <filter id="softShadow" x="8" y="10" width="240" height="240" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <path d="M128 22L214 58V129C214 179 179 223 128 236C77 223 42 179 42 129V58L128 22Z" fill="url(#shieldBg)"/>
+    <path d="M128 30L206 62V128C206 175 173 214 128 227C83 214 50 175 50 128V62L128 30Z" stroke="url(#strokeGlow)" stroke-width="4"/>
+  </g>
+
+  <path d="M128 46V210" stroke="#9EEBDF" stroke-opacity="0.72" stroke-width="3"/>
+  <path d="M68 84H188" stroke="#9EEBDF" stroke-opacity="0.7" stroke-width="3"/>
+  <path d="M76 124H180" stroke="#9EEBDF" stroke-opacity="0.72" stroke-width="3"/>
+  <path d="M86 164H170" stroke="#9EEBDF" stroke-opacity="0.68" stroke-width="3"/>
+
+  <circle cx="92" cy="84" r="4" fill="#d1fae5"/>
+  <circle cx="164" cy="84" r="4" fill="#d1fae5"/>
+  <circle cx="104" cy="124" r="4" fill="#d1fae5"/>
+  <circle cx="152" cy="124" r="4" fill="#d1fae5"/>
+  <circle cx="128" cy="164" r="4" fill="#d1fae5"/>
+
+  <rect x="86" y="98" width="84" height="62" rx="16" fill="#0f2f63" fill-opacity="0.82" stroke="#8be9d7" stroke-width="3"/>
+  <rect x="92" y="104" width="72" height="50" rx="12" fill="#1d4f8f" fill-opacity="0.76"/>
+
+  <text x="128" y="138" text-anchor="middle" fill="#dcfce7" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="1">AI</text>
+
+  <path d="M190 42C206 45 219 55 226 69C233 83 232 99 224 112C216 125 203 133 189 135" stroke="#59d3bb" stroke-width="14" stroke-linecap="round"/>
+  <path d="M203 84L228 58" stroke="#59d3bb" stroke-width="14" stroke-linecap="round"/>
+
+  <circle cx="54" cy="208" r="12" fill="#104180" stroke="#96f2df" stroke-width="3"/>
+  <path d="M64 198L92 174" stroke="#96f2df" stroke-width="7" stroke-linecap="round"/>
+</svg>

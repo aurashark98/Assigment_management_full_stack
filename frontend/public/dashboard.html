@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - MaintenanceAI</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
+          'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans',
+          'Helvetica Neue', sans-serif;
+        background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+        color: #ffffff;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .dashboard-container {
+        max-width: 800px;
+        width: 100%;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(51, 65, 85, 0.5);
+        border-radius: 24px;
+        padding: 60px 40px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 20px 60px rgba(59, 130, 246, 0.1);
+      }
+
+      .dashboard-header {
+        margin-bottom: 40px;
+      }
+
+      .dashboard-header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        background: linear-gradient(135deg, #3b82f6, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .dashboard-header p {
+        color: #94a3b8;
+        font-size: 1.1rem;
+      }
+
+      .user-info {
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(51, 65, 85, 0.3);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 30px;
+        text-align: left;
+      }
+
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.2);
+      }
+
+      .info-row:last-child {
+        border-bottom: none;
+      }
+
+      .info-label {
+        color: #64748b;
+        font-weight: 500;
+      }
+
+      .info-value {
+        color: #e2e8f0;
+        font-weight: 600;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      button {
+        padding: 12px 24px;
+        border-radius: 12px;
+        border: none;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #3b82f6, #a855f7);
+        color: white;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 40px rgba(59, 130, 246, 0.4);
+      }
+
+      .btn-secondary {
+        background: rgba(51, 65, 85, 0.5);
+        color: white;
+        border: 1px solid rgba(71, 85, 105, 0.5);
+      }
+
+      .btn-secondary:hover {
+        background: rgba(71, 85, 105, 0.6);
+        border-color: rgba(100, 116, 139, 0.7);
+      }
+
+      .btn-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: #fca5a5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+
+      .btn-danger:hover {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.5);
+      }
+
+      .note {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 12px;
+        padding: 16px;
+        margin-top: 30px;
+        color: #93c5fd;
+        font-size: 0.9rem;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .dashboard-container {
+        animation: fadeIn 0.5s ease-out;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="dashboard-container">
+      <div class="dashboard-header">
+        <h1>Welcome to Dashboard</h1>
+        <p>You have been successfully authenticated</p>
+      </div>
+
+      <div class="user-info">
+        <div class="info-row">
+          <span class="info-label">Status</span>
+          <span class="info-value">✓ Authenticated</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Email</span>
+          <span class="info-value" id="user-email">user@example.com</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Login Time</span>
+          <span class="info-value" id="login-time">Just now</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" onclick="goToHome()">← Back to Home</button>
+        <button class="btn-secondary" onclick="goToProfile()">Profile Settings</button>
+        <button class="btn-danger" onclick="logout()">Sign Out</button>
+      </div>
+
+      <div class="note">
+        <strong>ℹ️ This is a demo page.</strong> In production, this would be your
+        actual dashboard with real data and functionality.
+      </div>
+    </div>
+
+    <script>
+      // Load user info on page load
+      window.addEventListener('load', () => {
+        try {
+          const user = JSON.parse(localStorage.getItem('auth_user') || '{}');
+          const email = document.getElementById('user-email');
+          if (email && user.email) {
+            email.textContent = user.email;
+          }
+
+          const loginTime = document.getElementById('login-time');
+          if (loginTime) {
+            const now = new Date();
+            loginTime.textContent = now.toLocaleTimeString();
+          }
+        } catch (error) {
+          console.error('Error loading user info:', error);
+        }
+      });
+
+      function goToHome() {
+        window.location.href = '/';
+      }
+
+      function goToProfile() {
+        window.location.href = '/#/profile';
+      }
+
+      function logout() {
+        if (confirm('Are you sure you want to sign out?')) {
+          localStorage.removeItem('auth_user');
+          localStorage.removeItem('auth_user_email');
+          window.location.href = '/';
+        }
+      }
+    </script>
+  </body>
+</html>

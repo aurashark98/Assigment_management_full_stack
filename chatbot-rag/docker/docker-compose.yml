@@ -1,0 +1,55 @@
+name: chatbot-rag
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chatbot-rag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - chatbot-net
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: chatbot-rag-app:latest
+    container_name: chatbot-rag-app
+    ports:
+      - "8080:3000"
+    environment:
+      PORT: 3000
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      EMBEDDING_MODEL: Xenova/all-MiniLM-L6-v2
+      DOCS_DIR: ./src/docs
+      CHUNK_SIZE: 500
+      CHUNK_OVERLAP: 50
+      TOP_K: 3
+      NODE_ENV: production
+    volumes:
+      - ../src/docs:/app/src/docs:ro
+      - transformers-cache:/app/.cache/transformers
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - chatbot-net
+
+volumes:
+  ollama-data:
+  transformers-cache:
+
+networks:
+  chatbot-net:
+    driver: bridge

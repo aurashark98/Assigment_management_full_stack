@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chatbot RAG</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f6f8;
+    color: #1f2328;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: #ffffff;
+    border-bottom: 1px solid #e1e4e8;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .clear-btn {
+    padding: 6px 12px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #57606a;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .clear-btn:hover { background: #f5f6f8; color: #1f2328; }
+  .clear-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { font-size: 12px; color: #57606a; }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot.ok { background: #2da44e; }
+  .dot.bad { background: #cf222e; }
+  .dot.unknown { background: #9a9a9a; }
+
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .msg { margin-bottom: 16px; display: flex; flex-direction: column; }
+  .msg.user { align-items: flex-end; }
+  .msg.bot  { align-items: flex-start; }
+  .bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    line-height: 1.5;
+    word-wrap: break-word;
+  }
+  .msg.user .bubble { white-space: pre-wrap; }
+  .msg.user .bubble { background: #0969da; color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot  .bubble { background: #ffffff; border: 1px solid #e1e4e8; border-bottom-left-radius: 4px; }
+  .msg.bot .bubble h1,
+  .msg.bot .bubble h2,
+  .msg.bot .bubble h3,
+  .msg.bot .bubble h4 { font-weight: 600; margin: 12px 0 6px; line-height: 1.3; }
+  .msg.bot .bubble h1 { font-size: 17px; }
+  .msg.bot .bubble h2 { font-size: 16px; }
+  .msg.bot .bubble h3 { font-size: 15px; }
+  .msg.bot .bubble h4 { font-size: 14px; }
+  .msg.bot .bubble p { margin: 6px 0; }
+  .msg.bot .bubble p:first-child { margin-top: 0; }
+  .msg.bot .bubble p:last-child { margin-bottom: 0; }
+  .msg.bot .bubble ul,
+  .msg.bot .bubble ol { margin: 6px 0; padding-left: 22px; }
+  .msg.bot .bubble li { margin: 2px 0; }
+  .msg.bot .bubble code {
+    background: #f3f4f6;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+  }
+  .msg.bot .bubble pre {
+    background: #f6f8fa;
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  .msg.bot .bubble pre code { background: transparent; padding: 0; }
+  .msg.bot .bubble a { color: #0969da; text-decoration: underline; }
+  .msg.bot .bubble blockquote {
+    border-left: 3px solid #d0d7de;
+    margin: 8px 0;
+    padding: 0 12px;
+    color: #57606a;
+  }
+  .msg.bot .bubble table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+  .msg.bot .bubble th,
+  .msg.bot .bubble td {
+    border: 1px solid #d0d7de;
+    padding: 4px 8px;
+    text-align: left;
+  }
+  .msg.bot .bubble th { background: #f6f8fa; font-weight: 600; }
+  .msg.bot .bubble hr { border: 0; border-top: 1px solid #e1e4e8; margin: 10px 0; }
+  .sources {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #57606a;
+    max-width: 80%;
+  }
+  .sources details summary { cursor: pointer; user-select: none; }
+  .sources ul { margin: 6px 0 0; padding-left: 18px; }
+  .sources li { margin-bottom: 4px; }
+
+  footer {
+    border-top: 1px solid #e1e4e8;
+    background: #ffffff;
+    padding: 12px 24px;
+  }
+  .composer {
+    display: flex;
+    gap: 8px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    padding: 10px 12px;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 42px;
+    max-height: 180px;
+  }
+  .composer button {
+    padding: 0 18px;
+    border: none;
+    border-radius: 8px;
+    background: #0969da;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .composer button:disabled { background: #8c959f; cursor: not-allowed; }
+  .hint { font-size: 11px; color: #8b949e; max-width: 900px; margin: 6px auto 0; }
+  .empty {
+    text-align: center;
+    color: #8b949e;
+    padding: 40px 20px;
+  }
+  .empty h2 { font-size: 18px; margin: 0 0 8px; color: #57606a; }
+  .empty p { font-size: 13px; margin: 4px 0; }
+
+  .typing {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    height: 16px;
+  }
+  .typing span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #8b949e;
+    animation: typing-pulse 1.2s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing-pulse {
+    0%, 60%, 100% { opacity: 0.25; transform: scale(0.8); }
+    30%           { opacity: 1;    transform: scale(1);   }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chatbot RAG</h1>
+  <div class="header-right">
+    <button id="clearBtn" class="clear-btn" title="Bersihkan chat (atau ketik /clear)">Bersihkan</button>
+    <div class="status" id="status">
+      <span class="dot unknown"></span><span id="statusText">Memeriksa...</span>
+    </div>
+  </div>
+</header>
+
+<main id="chat">
+  <div class="empty" id="empty">
+    <h2>Selamat datang</h2>
+    <p>Silakan ajukan pertanyaan berdasarkan dokumen yang tersedia di knowledge base.</p>
+    <p>Tekan Enter untuk mengirim, Shift+Enter untuk baris baru.</p>
+  </div>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" placeholder="Tulis pertanyaan, lalu tekan Enter (Shift+Enter untuk baris baru)..." rows="1"></textarea>
+    <button id="send">Kirim</button>
+  </div>
+  <div class="hint">Bot menjawab berdasarkan dokumen di knowledge base. Jika informasi tidak ada, bot akan menjawab "Saya tidak menemukan informasi tersebut".</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.11/dist/purify.min.js"></script>
+<script>
+if (window.marked) {
+  marked.setOptions({ gfm: true, breaks: true });
+}
+
+function renderBotMarkdown(bubble, text) {
+  if (!window.marked || !window.DOMPurify) {
+    bubble.textContent = text;
+    return;
+  }
+  const html = marked.parse(text || '');
+  bubble.innerHTML = DOMPurify.sanitize(html);
+}
+
+const chatEl = document.getElementById('chat');
+const mainEl = chatEl;
+let emptyEl = document.getElementById('empty');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const clearBtn = document.getElementById('clearBtn');
+const statusDot = document.querySelector('#status .dot');
+const statusText = document.getElementById('statusText');
+
+const EMPTY_HTML = `<div class="empty" id="empty">
+  <h2>Selamat datang</h2>
+  <p>Silakan ajukan pertanyaan berdasarkan dokumen yang tersedia di knowledge base.</p>
+  <p>Tekan Enter untuk mengirim, Shift+Enter untuk baris baru.</p>
+</div>`;
+
+const history = [];
+
+function clearChat() {
+  history.length = 0;
+  mainEl.innerHTML = EMPTY_HTML;
+  emptyEl = document.getElementById('empty');
+  inputEl.focus();
+}
+
+async function refreshStatus() {
+  try {
+    const res = await fetch('/api/health');
+    const data = await res.json();
+    if (data.llm_status === 'connected') {
+      statusDot.className = 'dot ok';
+      statusText.textContent = `Online · ${data.provider}/${data.model} · ${data.chunks_indexed} chunks`;
+    } else if (data.llm_status === 'no_api_key') {
+      statusDot.className = 'dot bad';
+      statusText.textContent = 'API key belum diset (.env: ANTHROPIC_API_KEY)';
+    } else {
+      statusDot.className = 'dot bad';
+      const hint = data.provider === 'ollama' ? 'Ollama offline · jalankan "ollama serve"' : 'LLM offline';
+      statusText.textContent = hint;
+    }
+  } catch {
+    statusDot.className = 'dot bad';
+    statusText.textContent = 'Server tidak merespons';
+  }
+}
+
+function appendMessage(role, text) {
+  if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  wrapper.appendChild(bubble);
+
+  chatEl.appendChild(wrapper);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return bubble;
+}
+
+function appendSources(parentMsgEl, sources) {
+  if (!sources || sources.length === 0) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'sources';
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = `Sumber (${sources.length})`;
+  details.appendChild(summary);
+  const ul = document.createElement('ul');
+  for (const s of sources) {
+    const li = document.createElement('li');
+    li.innerHTML = `<strong>${s.file}</strong> <span style="color:#8b949e">(score: ${s.score})</span><br/><span style="font-size:11px;color:#57606a">${s.snippet}</span>`;
+    ul.appendChild(li);
+  }
+  details.appendChild(ul);
+  wrap.appendChild(details);
+  parentMsgEl.appendChild(wrap);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+async function sendMessage(text) {
+  appendMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const botBubble = appendMessage('bot', '');
+  botBubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  const botMsgEl = botBubble.parentElement;
+  let botText = '';
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: history.slice(0, -1), stream: true }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+      botBubble.textContent = `[Error] ${err.message || 'Unknown error'}`;
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let receivedSources = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let payload;
+        try { payload = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (payload.type === 'sources') {
+          receivedSources = payload.sources;
+        } else if (payload.type === 'token') {
+          botText += payload.content;
+          renderBotMarkdown(botBubble, botText);
+          chatEl.scrollTop = chatEl.scrollHeight;
+        } else if (payload.type === 'error') {
+          botBubble.textContent = `[Error] ${payload.message || payload.error}`;
+        } else if (payload.type === 'done') {
+          renderBotMarkdown(botBubble, botText);
+          if (receivedSources) appendSources(botMsgEl, receivedSources);
+          if (botText) history.push({ role: 'assistant', content: botText });
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    botBubble.textContent = `[Error] ${err.message}`;
+  }
+}
+
+sendBtn.addEventListener('click', () => {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  if (text === '/clear') {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    clearChat();
+    return;
+  }
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  sendBtn.disabled = true;
+  sendMessage(text).finally(() => { sendBtn.disabled = false; inputEl.focus(); });
+});
+
+clearBtn.addEventListener('click', clearChat);
+
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendBtn.click();
+  }
+});
+
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px';
+});
+
+refreshStatus();
+setInterval(refreshStatus, 15000);
+</script>
+</body>
+</html>
