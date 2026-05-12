@@ -108,6 +108,39 @@ async function parseJsonResponse(response: Response) {
   }
 }
 
+// API helper and header builder (same approach as UserWorkOrderDashboard)
+async function apiFetch(url: string, options: RequestInit = {}) {
+  const authApi = (window as any).auth;
+  if (authApi && typeof authApi.fetch === 'function') {
+    return authApi.fetch(url, options);
+  }
+
+  return fetch(url, options);
+}
+
+function getAuthRole(): string {
+  try {
+    const raw = localStorage.getItem('auth_user');
+    if (!raw) return 'REQUESTER';
+    const parsed = JSON.parse(raw) as { role?: string };
+    return String(parsed.role || 'REQUESTER').toUpperCase();
+  } catch {
+    return 'REQUESTER';
+  }
+}
+
+function buildRequesterHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-user-role': getAuthRole(),
+  };
+
+  const userId = getAuthUserId();
+  if (userId) headers['x-user-id'] = userId;
+
+  return headers;
+}
+
 export function WorkRequestDetailPage({
   reportId,
   onNavigate,
@@ -132,14 +165,20 @@ export function WorkRequestDetailPage({
           throw new Error('Session not found. Please sign in again.');
         }
 
-        const query = actorId
-          ? `actor_id=${encodeURIComponent(actorId)}`
-          : `actor_email=${encodeURIComponent(actorEmail)}`;
+        const headers = buildRequesterHeaders();
 
-        const [listResponse, detailResponse] = await Promise.all([
-          fetch(`${MAIN_API_BASE_URL}/api/work-requests/my?${query}`),
-          fetch(`${MAIN_API_BASE_URL}/api/work-request/${reportId}/detail`),
-        ]);
+        // Fetch requester list using same approach as dashboard (maintenance-report/read)
+        const listResponse = await apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/read`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            where: actorId ? [{ key: 'reporter_id', value: actorId }] : [{ key: 'reporter_id', value: actorEmail }],
+            limit: 1000,
+            sort_columns: [{ column: 'updated_at', direction: 'DESC' }],
+          }),
+        });
+
+        const detailResponse = await apiFetch(`${MAIN_API_BASE_URL}/api/work-request/${reportId}/detail`, { headers });
 
         const listResult = await parseJsonResponse(listResponse);
         const detailResult = await parseJsonResponse(detailResponse);

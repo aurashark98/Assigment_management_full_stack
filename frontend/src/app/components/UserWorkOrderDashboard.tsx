@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { ClipboardList, Eye, Home, Pencil, Send, Trash2, Wrench } from 'lucide-react';
 
 const MAIN_API_BASE_URL = 'http://127.0.0.1:3032';
+const REQUESTER_ROLE = 'REQUESTER';
 
 type RequestStatus =
   | 'draft'
@@ -140,6 +141,40 @@ function getAuthUserId(): string {
   }
 }
 
+function getAuthRole(): string {
+  try {
+    const raw = localStorage.getItem('auth_user');
+    if (!raw) return REQUESTER_ROLE;
+    const parsed = JSON.parse(raw) as { role?: string };
+    return String(parsed.role || REQUESTER_ROLE).toUpperCase();
+  } catch {
+    return REQUESTER_ROLE;
+  }
+}
+
+async function apiFetch(url: string, options: RequestInit = {}) {
+  const authApi = (window as any).auth;
+  if (authApi && typeof authApi.fetch === 'function') {
+    return authApi.fetch(url, options);
+  }
+
+  return fetch(url, options);
+}
+
+function buildRequesterHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-user-role': getAuthRole(),
+  };
+
+  const userId = getAuthUserId();
+  if (userId) {
+    headers['x-user-id'] = userId;
+  }
+
+  return headers;
+}
+
 async function parseJsonResponse(response: Response) {
   const contentType = response.headers.get('content-type') || '';
   const text = await response.text();
@@ -198,15 +233,15 @@ export function UserWorkOrderDashboard({
 
   const fetchMasterData = async () => {
     const [assetResponse, categoryResponse] = await Promise.all([
-      fetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/facility-asset/read`, {
+      apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/facility-asset/datatables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ per_page: 500 }),
+        body: JSON.stringify({ draw: 1, start: 0, length: 500 }),
       }),
-      fetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/issue-category/read`, {
+      apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/issue-category/datatables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ per_page: 500 }),
+        body: JSON.stringify({ draw: 1, start: 0, length: 500 }),
       }),
     ]);
 
@@ -226,13 +261,15 @@ export function UserWorkOrderDashboard({
       return;
     }
 
-    const query = actorId
-      ? `actor_id=${encodeURIComponent(actorId)}`
-      : `actor_email=${encodeURIComponent(actorEmail)}`;
-
-    const response = await fetch(
-      `${MAIN_API_BASE_URL}/api/work-requests/my?${query}`,
-    );
+    const response = await apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/read`, {
+      method: 'POST',
+      headers: buildRequesterHeaders(),
+      body: JSON.stringify({
+        where: [{ key: 'reporter_id', value: actorId }],
+        limit: 1000,
+        sort_columns: [{ column: 'updated_at', direction: 'DESC' }],
+      }),
+    });
     const result = await parseJsonResponse(response);
 
     if (!response.ok) {
@@ -316,12 +353,8 @@ export function UserWorkOrderDashboard({
   const createOrUpdateDraft = async (): Promise<WorkRequestItem | null> => {
     if (!context?.user_id && !context?.email) return null;
 
-    const actorField = context.user_id
-      ? { actor_id: context.user_id }
-      : { actor_email: context.email };
-
     const payload = {
-      ...actorField,
+      reporter_id: context.user_id,
       title: formState.title.trim(),
       description: formState.description.trim(),
       facility_id: formState.facility_id,
@@ -335,13 +368,16 @@ export function UserWorkOrderDashboard({
 
     const isEdit = !!editingDraft;
     const endpoint = isEdit
-      ? `${MAIN_API_BASE_URL}/api/maintenance_report/${editingDraft?.report_id}`
-      : `${MAIN_API_BASE_URL}/api/maintenance_report`;
+      ? `${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/update`
+      : `${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/create`;
 
-    const response = await fetch(endpoint, {
-      method: isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    const response = await apiFetch(endpoint, {
+      method: 'POST',
+      headers: buildRequesterHeaders(),
+      body: JSON.stringify({
+        ...payload,
+        ...(isEdit ? { report_id: editingDraft?.report_id } : {}),
+      }),
     });
 
     const result = await parseJsonResponse(response);
@@ -393,14 +429,13 @@ export function UserWorkOrderDashboard({
       const draft = await createOrUpdateDraft();
       if (!draft?.report_id) throw new Error('Draft tidak valid untuk disubmit');
 
-      const actorBody = context.user_id
-        ? { actor_id: context.user_id }
-        : { actor_email: context.email };
-
-      const response = await fetch(`${MAIN_API_BASE_URL}/api/work-requests/${draft.report_id}/submit`, {
+      const response = await apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...actorBody, note: 'Submitted by requester' }),
+        headers: buildRequesterHeaders(),
+        body: JSON.stringify({
+          report_id: draft.report_id,
+          status: 'submitted',
+        }),
       });
       const result = await parseJsonResponse(response);
 
@@ -424,14 +459,11 @@ export function UserWorkOrderDashboard({
     if (!window.confirm('Delete this work request draft?')) return;
 
     try {
-      const actorQuery = context.user_id
-        ? `actor_id=${encodeURIComponent(context.user_id)}`
-        : `actor_email=${encodeURIComponent(context.email)}`;
-
-      const response = await fetch(
-        `${MAIN_API_BASE_URL}/api/maintenance_report/${item.report_id}?${actorQuery}`,
-        { method: 'DELETE' },
-      );
+      const response = await apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/delete`, {
+        method: 'POST',
+        headers: buildRequesterHeaders(),
+        body: JSON.stringify({ where: [{ key: 'report_id', value: item.report_id }] }),
+      });
       const result = await parseJsonResponse(response);
 
       if (!response.ok) {
@@ -450,14 +482,13 @@ export function UserWorkOrderDashboard({
     if (!window.confirm('Submit this damage report now?')) return;
 
     try {
-      const actorBody = context.user_id
-        ? { actor_id: context.user_id }
-        : { actor_email: context.email };
-
-      const response = await fetch(`${MAIN_API_BASE_URL}/api/work-requests/${item.report_id}/submit`, {
+      const response = await apiFetch(`${MAIN_API_BASE_URL}/api/facility-helpdesk/maintenance-report/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...actorBody, note: 'Submitted by requester' }),
+        headers: buildRequesterHeaders(),
+        body: JSON.stringify({
+          report_id: item.report_id,
+          status: 'submitted',
+        }),
       });
       const result = await parseJsonResponse(response);
 
@@ -582,12 +613,12 @@ export function UserWorkOrderDashboard({
                       <p className="text-xs font-mono text-slate-400 tracking-wide">WR #{item.report_number}</p>
                       <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 mt-4">
                         <div className="flex items-center gap-2 p-2 rounded-lg bg-white/40">
-                          <span className="font-bold text-slate-800 min-w-fit">Asset:</span>
-                          <span className="text-slate-700 font-medium">{item.facility_name || item.facility_id}</span>
+                          <span className="font-bold text-slate-800 min-w-fit" style={{ textTransform: 'uppercase' }}>ID Laporan:</span>
+                          <span className="text-slate-700 font-medium">{item.report_number}</span>
                         </div>
                         <div className="flex items-center gap-2 p-2 rounded-lg bg-white/40">
-                          <span className="font-bold text-slate-800 min-w-fit">Category:</span>
-                          <span className="text-slate-700 font-medium">{item.category_name || item.category_id}</span>
+                          <span className="font-bold text-slate-800 min-w-fit" style={{ textTransform: 'uppercase' }}>Judul:</span>
+                          <span className="text-slate-700 font-medium">{item.title}</span>
                         </div>
                         <div className="flex items-center gap-2 p-2 rounded-lg bg-white/40">
                           <span className="font-bold text-slate-800 min-w-fit">Technician:</span>

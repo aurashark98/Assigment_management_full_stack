@@ -24,21 +24,8 @@ interface ProfileData {
   profile_photo: string;
 }
 
-interface ProfileResponse {
-  message?: string;
-  user?: {
-    id: string | number;
-    username?: string | null;
-    full_name?: string | null;
-    email: string;
-    phone?: string | null;
-    gender?: string | null;
-    birth_date?: string | null;
-    profile_photo?: string | null;
-  };
-}
-
-const API_BASE_URL = 'http://127.0.0.1:3032';
+const AUTH_BASE_URL = 'http://127.0.0.1:3032/api/facility-helpdesk/auth';
+const APP_USER_BASE_URL = 'http://127.0.0.1:3032/api/facility-helpdesk/app-user';
 
 const emptyProfile: ProfileData = {
   id: '',
@@ -98,10 +85,11 @@ export function ProfilePage() {
       setSuccessMessage('');
 
       try {
-        const response = await fetch(`${API_BASE_URL}/profile/${authUser.id}`);
-        const data: ProfileResponse = await response.json();
+        const response = await fetch(`${AUTH_BASE_URL}/profile/${authUser.id}`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = await response.json();
 
-        if (!response.ok || !data.user) {
+        if (!response.ok || !data.data?.user) {
           clearAuthSessionStorage();
           setAuthUser(null);
           setErrorMessage(data.message || 'Failed to load profile data.');
@@ -109,28 +97,28 @@ export function ProfilePage() {
         }
 
         const profileData = {
-          id: data.user.id,
-          username: data.user.username || '',
-          full_name: data.user.full_name || '',
-          email: data.user.email || '',
-          phone: data.user.phone || '',
-          gender: data.user.gender || '',
-          birth_date: data.user.birth_date || '',
-          profile_photo: data.user.profile_photo || '',
+          id: data.data.user.id || data.data.user.user_id,
+          username: data.data.user.username || data.data.user.employee_code || '',
+          full_name: data.data.user.full_name || '',
+          email: data.data.user.email || '',
+          phone: data.data.user.phone || '',
+          gender: data.data.user.gender || '',
+          birth_date: data.data.user.birth_date || '',
+          profile_photo: data.data.user.profile_photo || '',
         };
 
         setProfile(profileData);
 
         // Update completion percentage based on fetched data
         const percentage = getProfileCompletionPercentage({
-          id: data.user.id,
-          username: data.user.username || '',
-          full_name: data.user.full_name || '',
-          email: data.user.email || '',
-          phone: data.user.phone || '',
-          gender: data.user.gender || '',
-          birth_date: data.user.birth_date || '',
-          profile_photo: data.user.profile_photo || '',
+          id: Number(data.data.user.id || data.data.user.user_id),
+          username: data.data.user.username || data.data.user.employee_code || '',
+          full_name: data.data.user.full_name || '',
+          email: data.data.user.email || '',
+          phone: data.data.user.phone || '',
+          gender: data.data.user.gender || '',
+          birth_date: data.data.user.birth_date || '',
+          profilePhoto: data.data.user.profile_photo || '',
         });
         setCompletionPercentage(percentage);
       } catch {
@@ -146,7 +134,11 @@ export function ProfilePage() {
   // Update completion percentage when profile changes
   useEffect(() => {
     if (profile.id) {
-      const percentage = getProfileCompletionPercentage(profile);
+      const percentage = getProfileCompletionPercentage({
+        ...profile,
+        id: Number(profile.id),
+        profilePhoto: profile.profile_photo,
+      });
       setCompletionPercentage(percentage);
     }
   }, [profile]);
@@ -155,8 +147,10 @@ export function ProfilePage() {
     if (profile.profile_photo?.trim()) {
       return profile.profile_photo;
     }
+    // fallback to auth user's stored profilePhoto (navbar uses this)
+    if (authUser?.profilePhoto) return authUser.profilePhoto as string;
     return '';
-  }, [profile.profile_photo]);
+  }, [profile.profile_photo, authUser?.profilePhoto]);
 
   const handleChange = (field: keyof ProfileData, value: string) => {
     setProfile((prev) => ({ ...prev, [field]: value }));
@@ -186,12 +180,13 @@ export function ProfilePage() {
     setSuccessMessage('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/app_user/${authUser.id}`, {
-        method: 'PUT',
+      const response = await fetch(`${APP_USER_BASE_URL}/update`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          user_id: authUser.id,
           full_name: profile.full_name,
           email: profile.email,
           phone: profile.phone,
@@ -202,38 +197,40 @@ export function ProfilePage() {
         }),
       });
 
-      const data: ProfileResponse = await response.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await response.json();
 
-      if (!response.ok || !data.user) {
-        clearAuthSessionStorage();
-        setAuthUser(null);
+      if (!response.ok || !data.data) {
         setErrorMessage(data.message || 'Failed to save profile.');
         return;
       }
 
+      // the update response from app-user/update returns `data: responseData` which contains fields like user_id, email, etc.
+      const updatedData = data.data || {};
+
       const updatedUser: StoredAuthUser = {
-        id: data.user.id,
-        email: data.user.email,
-        username: data.user.username || null,
-        profilePhoto: data.user.profile_photo || null,
-        full_name: data.user.full_name || null,
+        id: updatedData.user_id || authUser.id,
+        email: updatedData.email || profile.email,
+        username: updatedData.employee_code || updatedData.username || profile.username || null,
+        profilePhoto: updatedData.profile_photo || profile.profile_photo || null,
+        full_name: updatedData.full_name || profile.full_name || null,
       };
 
       localStorage.setItem('auth_user', JSON.stringify(updatedUser));
-      localStorage.setItem('auth_user_email', data.user.email);
+      localStorage.setItem('auth_user_email', updatedUser.email);
       touchAuthSession();
       window.dispatchEvent(new Event('auth-user-updated'));
 
       setAuthUser(updatedUser);
       setProfile((prev) => ({
         ...prev,
-        username: data.user?.username || '',
-        full_name: data.user?.full_name || '',
-        email: data.user?.email || '',
-        phone: data.user.phone || '',
-        gender: data.user?.gender || '',
-        birth_date: data.user?.birth_date || '',
-        profile_photo: data.user?.profile_photo || '',
+        username: updatedData.employee_code || updatedData.username || prev.username,
+        full_name: updatedData.full_name || prev.full_name,
+        email: updatedData.email || prev.email || '',
+        phone: updatedData.phone || prev.phone || '',
+        gender: updatedData.gender || prev.gender || '',
+        birth_date: updatedData.birth_date || prev.birth_date || '',
+        profile_photo: updatedData.profile_photo || prev.profile_photo || '',
       }));
       setSuccessMessage(data.message || 'Profile updated successfully.');
     } catch {
@@ -372,7 +369,7 @@ export function ProfilePage() {
                     <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-xl border border-emerald-200/40 bg-gradient-to-br from-emerald-50 to-emerald-50/50 p-3">
                         <p className="text-xs font-medium text-slate-600">Status</p>
-                        <p className="mt-1.5 font-bold text-emerald-700">{isProfileComplete(profile) ? 'Complete' : 'Incomplete'}</p>
+                        <p className="mt-1.5 font-bold text-emerald-700">{isProfileComplete({ ...profile, id: Number(profile.id), profilePhoto: profile.profile_photo }) ? 'Complete' : 'Incomplete'}</p>
                       </div>
                       <div className="rounded-xl border border-amber-200/40 bg-gradient-to-br from-amber-50 to-amber-50/50 p-3">
                         <p className="text-xs font-medium text-slate-600">Photo</p>

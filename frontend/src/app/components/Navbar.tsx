@@ -2,8 +2,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, Eye, EyeOff, ShieldCheck, UserRound, Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { clearAuthSessionStorage, touchAuthSession, validateAndRefreshAuthSession } from '../../utils/authSession';
+import { legacyAuthClient } from '../../utils/legacyAuthClient';
 
-type AuthMode = 'login' | 'signup';
+type AuthMode = 'login';
 
 interface AuthResponse {
   message?: string;
@@ -28,19 +29,17 @@ interface NavbarProps {
 }
 
 const API_BASE_URL = 'http://127.0.0.1:3032';
+const AUTH_BASE_URL = 'http://127.0.0.1:3032/api/facility-helpdesk/auth';
 
 export function Navbar({ currentPath, onNavigate }: NavbarProps) {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -48,6 +47,14 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
   // Treat root, /about, /analysis, and /work-order as top-level pages so the navbar stays consistent.
   const isLandingPage = currentPath === '/' || currentPath === '/about' || currentPath === '/analysis' || currentPath === '/work-order';
   const isAppPage = !isLandingPage;
+  const showDashboardShortcut = Boolean(currentUserEmail) && currentPath !== '/dashboard';
+
+  const navLinks: Array<{ label: string; id?: string; path?: string }> = [
+    { label: 'Features', id: 'features' },
+    { label: 'About', path: '/about' },
+    { label: 'Analysis', path: '/analysis' },
+    { label: 'Work Order', path: '/work-order' },
+  ];
 
   useEffect(() => {
     const isSessionValid = validateAndRefreshAuthSession();
@@ -64,10 +71,10 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
 
         const validateStoredUser = async () => {
           try {
-            const response = await fetch(`${API_BASE_URL}/profile/${parsedUser.id}`);
+            const response = await fetch(`${AUTH_BASE_URL}/profile/${parsedUser.id}`);
             const data = await response.json();
 
-            if (!response.ok || !data.user) {
+            if (!response.ok || !data.data?.user) {
               clearAuthSessionStorage();
               setCurrentUser(null);
               setCurrentUserEmail(null);
@@ -75,10 +82,10 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
             }
 
             const refreshedUser: AuthUser = {
-              id: data.user.id,
-              email: data.user.email,
-              username: data.user.username || null,
-              profilePhoto: data.user.profile_photo || null,
+              id: data.data.user.id || data.data.user.user_id,
+              email: data.data.user.email,
+              username: data.data.user.username || data.data.user.employee_code || null,
+              profilePhoto: data.data.user.profile_photo || null,
             };
 
             setCurrentUser(refreshedUser);
@@ -149,15 +156,15 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
 
     const syncProfileSummary = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/profile/${currentUser.id}`);
+        const response = await fetch(`${AUTH_BASE_URL}/profile/${currentUser.id}`);
         const data = await response.json();
-        if (!response.ok || !data.user) return;
+        if (!response.ok || !data.data?.user) return;
 
         const refreshedUser: AuthUser = {
-          id: data.user.id,
-          email: data.user.email,
-          username: data.user.username || null,
-          profilePhoto: data.user.profile_photo || null,
+          id: data.data.user.id || data.data.user.user_id,
+          email: data.data.user.email,
+          username: data.data.user.username || data.data.user.employee_code || null,
+          profilePhoto: data.data.user.profile_photo || null,
         };
 
         setCurrentUser(refreshedUser);
@@ -208,12 +215,10 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
   // Debug banner removed — nothing to update here.
 
   const openAuthModal = (mode: AuthMode) => {
-    setAuthMode(mode);
     setIsAuthOpen(true);
     setAuthError('');
     setAuthSuccess('');
     setShowPassword(false);
-    setShowConfirmPassword(false);
   };
 
   const closeAuthModal = () => {
@@ -221,15 +226,12 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
     setAuthError('');
     setAuthSuccess('');
     setPassword('');
-    setConfirmPassword('');
     setShowPassword(false);
-    setShowConfirmPassword(false);
   };
 
   const clearAuthForm = () => {
     setEmail('');
     setPassword('');
-    setConfirmPassword('');
   };
 
   const handleLogout = () => {
@@ -247,44 +249,20 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
     const normalizedInput = email.trim().toLowerCase();
 
     if (!normalizedInput || !password.trim()) {
-      setAuthError(authMode === 'login' ? 'Username/email and password are required.' : 'Email and password are required.');
-      return;
-    }
-
-    if (authMode === 'signup' && password !== confirmPassword) {
-      setAuthError('Konfirmasi password tidak cocok.');
+      setAuthError('Username dan password wajib diisi.');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const endpoint = authMode === 'signup' ? '/auth/signup' : '/auth/login';
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(
-          authMode === 'login'
-            ? { identifier: normalizedInput, password }
-            : { email: normalizedInput, password },
-        ),
-      });
-
-      const data: AuthResponse = await response.json();
-
-      if (!response.ok) {
-        setAuthError(data.message || 'Authentication failed.');
-        return;
-      }
-
-      const loggedEmail = data.user?.email || normalizedInput;
+      const userData = await legacyAuthClient.login(normalizedInput, password);
+      const loggedEmail = userData.email || normalizedInput;
       const authUser: AuthUser = {
-        id: data.user?.id || 0,
+        id: userData.id || 0,
         email: loggedEmail,
-        username: data.user?.username || null,
-        profilePhoto: null,
+        username: userData.username || null,
+        profilePhoto: userData.profilePhoto || null,
       };
 
       setCurrentUser(authUser);
@@ -293,15 +271,19 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
       localStorage.setItem('auth_user_email', loggedEmail);
       touchAuthSession();
       window.dispatchEvent(new Event('auth-user-updated'));
-      setAuthSuccess(data.message || 'Berhasil.');
+      setAuthError('');
+      setAuthSuccess('Login berhasil.');
       clearAuthForm();
 
       setTimeout(() => {
         closeAuthModal();
         onNavigate('/dashboard');
       }, 500);
-    } catch {
-      setAuthError('Server is unavailable.');
+    } catch (err: any) {
+      // Clear success and show error with debug info
+      setAuthSuccess('');
+      console.error('Auth request error:', err);
+      setAuthError(err?.message || 'Gagal terhubung ke auth service.');
     } finally {
       setIsSubmitting(false);
     }
@@ -346,37 +328,30 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
               {/* Desktop Navigation & Auth */}
               <div className="hidden md:flex items-center flex-1 ml-6">
                 {/* Navigation Links - Desktop */}
-                {isLandingPage && (
-                  <div className="flex-1 flex items-center justify-center">
-                    <div className="flex items-center gap-7">
-                      {[
-                        { label: 'Features', id: 'features' },
-                        { label: 'About', path: '/about' },
-                        { label: 'Analysis', path: '/analysis' },
-                        { label: 'Work Order', path: '/work-order' },
-                      ].map((link) => (
-                        <motion.button
-                          key={link.label}
-                          whileHover={{ y: -2 }}
-                          type="button"
-                          onClick={() => (link.path ? onNavigate(link.path) : navigateToSection((link as any).id))}
-                          className="group relative text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
-                        >
-                          {link.label}
-                          <motion.span
-                            className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-blue-600 to-cyan-600 group-hover:w-full transition-all duration-300 rounded-full"
-                          />
-                        </motion.button>
-                      ))}
-                    </div>
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="flex items-center gap-7">
+                    {navLinks.map((link) => (
+                      <motion.button
+                        key={link.label}
+                        whileHover={{ y: -2 }}
+                        type="button"
+                        onClick={() => (link.path ? onNavigate(link.path) : navigateToSection(String(link.id || 'features')))}
+                        className="group relative text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors"
+                      >
+                        {link.label}
+                        <motion.span
+                          className="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-blue-600 to-cyan-600 group-hover:w-full transition-all duration-300 rounded-full"
+                        />
+                      </motion.button>
+                    ))}
                   </div>
-                )}
+                </div>
                 
                 {/* Auth Section - Desktop */}
                 <div className={`flex items-center gap-0 ${isLandingPage ? '' : 'ml-auto'}`}>
                   {currentUserEmail ? (
                     <div className="flex items-center gap-2 sm:gap-3">
-                      {isAppPage && (
+                      {showDashboardShortcut && (
                         <motion.button
                           whileHover={{ scale: 1.03, y: -1 }}
                           whileTap={{ scale: 0.98 }}
@@ -428,15 +403,7 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                         onClick={() => openAuthModal('login')}
                         className="app-btn-secondary rounded-full px-3 py-1.5 text-xs"
                       >
-                        Sign In
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => openAuthModal('signup')}
-                        className="app-btn-primary rounded-full px-3 py-1.5 text-xs"
-                      >
-                        Get Started
+                        Login
                       </motion.button>
                     </div>
                   )}
@@ -502,38 +469,31 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                   </div>
 
                   {/* Mobile Nav Links */}
-                  {isLandingPage && (
-                    <div className="relative space-y-2 pb-4 border-b border-white/10">
-                      {[
-                        { label: 'Features', id: 'features' },
-                        { label: 'About', path: '/about' },
-                        { label: 'Analysis', path: '/analysis' },
-                        { label: 'Work Order', path: '/work-order' },
-                      ].map((link) => (
-                        <motion.button
-                          key={link.label}
-                          whileHover={{ x: 4 }}
-                          type="button"
-                          onClick={() => {
-                            if ((link as any).path) {
-                              onNavigate((link as any).path);
-                            } else {
-                              navigateToSection((link as any).id);
-                            }
-                            setIsMenuOpen(false);
-                          }}
-                          className="w-full rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:text-slate-900"
-                        >
-                          {link.label}
-                        </motion.button>
-                      ))}
-                    </div>
-                  )}
+                  <div className="relative space-y-2 pb-4 border-b border-white/10">
+                    {navLinks.map((link) => (
+                      <motion.button
+                        key={link.label}
+                        whileHover={{ x: 4 }}
+                        type="button"
+                        onClick={() => {
+                          if (link.path) {
+                            onNavigate(link.path);
+                          } else {
+                            navigateToSection(String(link.id || 'features'));
+                          }
+                          setIsMenuOpen(false);
+                        }}
+                        className="w-full rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 transition-all hover:bg-slate-50 hover:text-slate-900"
+                      >
+                        {link.label}
+                      </motion.button>
+                    ))}
+                  </div>
 
                   {/* Mobile Auth */}
                   {currentUserEmail ? (
                     <div className="relative space-y-2 pt-4">
-                      {isAppPage && ( 
+                      {showDashboardShortcut && ( 
                         <motion.button
                           whileHover={{ scale: 1.02 }}
                           type="button"
@@ -593,17 +553,7 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                         }}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition-all hover:border-cyan-300/60 hover:bg-white"
                       >
-                        Sign In
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        onClick={() => {
-                          openAuthModal('signup');
-                          setIsMenuOpen(false);
-                        }}
-                        className="w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(37,99,235,0.3)] transition-all hover:from-cyan-400 hover:to-blue-500"
-                      >
-                        Get Started
+                        Login
                       </motion.button>
                     </div>
                   )}
@@ -636,13 +586,9 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                     <ShieldCheck className="h-3.5 w-3.5" />
                     Secure Access
                   </div>
-                  <h3 className="text-xl font-semibold text-slate-900">
-                    {authMode === 'login' ? 'Welcome Back' : 'Create Account'}
-                  </h3>
+                    <h3 className="text-xl font-semibold text-slate-900">Welcome Back</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    {authMode === 'login'
-                      ? 'Login untuk lanjutkan ke dashboard MaintenanceAI.'
-                      : 'Create a new account to start using MaintenanceAI.'}
+                      Login untuk lanjutkan ke dashboard MaintenanceAI.
                   </p>
                 </div>
                 <button
@@ -653,33 +599,16 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                 </button>
               </div>
 
-              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
-                <button
-                  onClick={() => setAuthMode('login')}
-                  className={`rounded-2xl px-3 py-2 text-sm font-semibold transition-all ${
-                    authMode === 'login'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:bg-white'
-                  }`}
-                >
+              <div className="mb-5 rounded-2xl bg-slate-100 p-1.5">
+                <div className="rounded-2xl bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-sm">
                   Login
-                </button>
-                <button
-                  onClick={() => setAuthMode('signup')}
-                  className={`rounded-2xl px-3 py-2 text-sm font-semibold transition-all ${
-                    authMode === 'signup'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:bg-white'
-                  }`}
-                >
-                  Sign Up
-                </button>
+                </div>
               </div>
 
               <form onSubmit={handleSubmitAuth} className="space-y-4">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                    {authMode === 'login' ? 'Username / Email' : 'Email'}
+                    Username / Email
                   </span>
                   <div className="flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 focus-within:border-blue-500">
                     <Mail className="h-4 w-4 text-slate-400" />
@@ -687,7 +616,7 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                       type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder={authMode === 'login' ? 'username atau email' : 'you@example.com'}
+                      placeholder="username atau email"
                       className="w-full bg-transparent py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
                     />
                   </div>
@@ -716,32 +645,6 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                   </div>
                 </label>
 
-                {authMode === 'signup' && (
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                      Confirm Password
-                    </span>
-                    <div className="flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 focus-within:border-blue-500">
-                      <Lock className="h-4 w-4 text-slate-400" />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Ulangi password"
-                        className="w-full bg-transparent py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword((prev) => !prev)}
-                        className="text-slate-400 hover:text-slate-200"
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                      <p className="mt-1 text-xs text-slate-500">Gunakan minimal 6 karakter.</p>
-                  </label>
-                )}
-
                 {authError && (
                   <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                     {authError}
@@ -763,9 +666,7 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                   )}
                   {isSubmitting
                     ? 'Processing...'
-                    : authMode === 'login'
-                      ? 'Login'
-                      : 'Create Account'}
+                    : 'Login'}
                 </button>
               </form>
             </div>
@@ -809,7 +710,7 @@ export function Navbar({ currentPath, onNavigate }: NavbarProps) {
                   Loading your dashboard...
                 </h3>
                 <p className="text-slate-400 text-sm">
-                  {authMode === 'signup' ? 'Creating your account' : 'Verifying your credentials'}
+                    Verifying your credentials
                 </p>
               </motion.div>
 
